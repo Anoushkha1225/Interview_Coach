@@ -11,13 +11,9 @@ langchain-core==0.2.10
 PyPDF2==3.0.1
 python-docx==1.1.0
 
-# Text-to-Speech (currently imported but not used)
-# pyttsx3==2.90
-
 # Web Requests and Environment
 requests==2.31.0
 python-dotenv==1.0.0
 
-# Additional Dependencies
-Pillow==10.1.0
+# Type hints
 typing-extensions==4.8.0
