@@ -548,3 +548,23 @@ async def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Add at the top with other imports
+
+
+# Update CORS origins to include your Vercel frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://interview-coach-chi.vercel.app/",  # Replace with your actual Vercel URL
+        "http://localhost:5173",  # Keep for local development
+        "https://localhost:5173"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Update the uvicorn run command at the bottom
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
