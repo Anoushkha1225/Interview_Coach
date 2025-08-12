@@ -1,6 +1,8 @@
 # app.py - Enhanced FastAPI Backend with AI Rating System
+# app.py - Enhanced FastAPI Backend with AI Rating System
 import os
-import pyttsx3
+# Remove this unused import that might cause issues in production
+# import pyttsx3
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,6 +19,8 @@ from collections import deque
 import io
 import tempfile
 import statistics
+
+# Rest of your code remains the same...
 
 # Load environment variables
 load_dotenv()
