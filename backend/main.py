@@ -26,10 +26,7 @@ app = FastAPI(title="Adaptive Interview Bot API", version="1.0.0")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to your frontend domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["https://interview-coach-chi.vercel.app"]
 )
 
 # Setup LLM
