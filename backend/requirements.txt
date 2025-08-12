@@ -4,19 +4,15 @@ uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # AI and Language Models
-langchain-openai==0.0.8
-langchain-core==0.1.52
-openai==1.12.0
+langchain-openai==0.1.8
+langchain-core==0.2.10
 
 # Document Processing
 PyPDF2==3.0.1
 python-docx==1.1.0
 
-# Text-to-Speech (simplified for deployment)
-pyttsx3==2.90
-
-# Data Processing and Scientific Computing
-numpy==1.24.4
+# Text-to-Speech (currently imported but not used)
+# pyttsx3==2.90
 
 # Web Requests and Environment
 requests==2.31.0
@@ -25,10 +21,3 @@ python-dotenv==1.0.0
 # Additional Dependencies
 Pillow==10.1.0
 typing-extensions==4.8.0
-
-# Audio Processing - Simplified (removed problematic whisper)
-# Note: Whisper functionality will be disabled in production
-# openai-whisper causes build issues on Python 3.13
-# pydub==0.25.1
-# soundfile==0.12.1
-# ffmpeg-python==0.2.0
