@@ -28,10 +28,14 @@ if not api_key:
 # Setup FastAPI app
 app = FastAPI(title="Adaptive Interview Bot API", version="1.0.0")
 
-# Add CORS middleware
+# Add CORS middleware - Fixed for production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=[
+        "https://interview-coach-chi.vercel.app",  # Your Vercel URL (removed trailing slash)
+        "http://localhost:5173",  # Keep for local development
+        "https://localhost:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,7 +72,7 @@ class SessionData(BaseModel):
     position: str = ""
     experience_level: str = ""
 
-# Resume processing functions (from your original code)
+# Resume processing functions
 def read_pdf_from_bytes(file_bytes):
     try:
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
@@ -119,7 +123,7 @@ def extract_projects(text):
     projects = re.findall(r'(?:project:|worked on)\s*([A-Z][a-zA-Z0-9\s&-]+)', text)
     return [p.strip() for p in projects]
 
-# New AI Rating Functions
+# AI Rating Functions
 async def generate_answer_review_and_rating(question, answer, position, experience_level):
     """Generate AI review and rating for a given answer"""
     try:
@@ -164,7 +168,7 @@ async def generate_answer_review_and_rating(question, answer, position, experien
             
             # Extract rating
             rating_match = re.search(r'RATING:\s*(\d)', content)
-            rating = int(rating_match.group(1)) if rating_match else 2  # Default to 2 instead of 3 for stricter evaluation
+            rating = int(rating_match.group(1)) if rating_match else 2
             
             # Extract review
             review_match = re.search(r'REVIEW:\s*(.*)', content, re.DOTALL)
@@ -190,14 +194,14 @@ async def calculate_hiring_probability(asked_questions, position, experience_lev
         # Early termination penalty - heavily penalize incomplete interviews
         if completion_rate < 0.3:  # Less than 30% completed
             return {
-                "probability": min(5, int(completion_rate * 100 * 0.2)),  # Max 5% for very incomplete interviews
+                "probability": min(5, int(completion_rate * 100 * 0.2)),
                 "feedback": f"Interview significantly incomplete ({len(asked_questions)}/{total_questions_available} questions answered). Insufficient data to make a hiring decision. Completion rate: {completion_rate:.1%}. Recommend completing at least 30% of questions for meaningful evaluation.",
                 "average_rating": 0,
                 "completion_rate": completion_rate
             }
         
         # Calculate average rating
-        ratings = [q.get('rating', 1) for q in asked_questions]  # Default to 1 instead of 3 for failed questions
+        ratings = [q.get('rating', 1) for q in asked_questions]
         avg_rating = statistics.mean(ratings)
         
         # Create summary of performance
@@ -223,15 +227,15 @@ async def calculate_hiring_probability(asked_questions, position, experience_lev
             base_probability = 3
         
         # Apply completion rate multiplier
-        completion_multiplier = min(1.0, completion_rate + 0.3)  # Bonus for completion, but cap at 1.0
-        if completion_rate < 0.5:  # Less than 50% completed
-            completion_multiplier *= 0.6  # Additional penalty
-        elif completion_rate < 0.7:  # Less than 70% completed
-            completion_multiplier *= 0.8  # Moderate penalty
+        completion_multiplier = min(1.0, completion_rate + 0.3)
+        if completion_rate < 0.5:
+            completion_multiplier *= 0.6
+        elif completion_rate < 0.7:
+            completion_multiplier *= 0.8
         
         # Calculate final probability
         final_probability = int(base_probability * completion_multiplier)
-        final_probability = max(0, min(100, final_probability))  # Ensure 0-100 range
+        final_probability = max(0, min(100, final_probability))
         
         # Generate detailed feedback
         hiring_prompt = f"""
@@ -483,7 +487,7 @@ async def assess_answer_relevance(answer, question):
         relevance_response = llm.invoke([HumanMessage(content=relevance_prompt)])
         if relevance_response and relevance_response.content:
             return relevance_response.content.strip().lower()
-        return 'relevant'  # Default to relevant if assessment fails
+        return 'relevant'
     except Exception as e:
         print(f"Error assessing relevance: {e}")
         return 'relevant'
@@ -511,7 +515,7 @@ async def get_interview_summary(session_id: str):
             session.asked_questions, 
             session.position, 
             session.experience_level,
-            len(session.question_queue)  # Pass total questions available
+            len(session.question_queue)
         )
         
         return {
@@ -546,25 +550,7 @@ async def reset_session(session_id: str):
 async def health_check():
     return {"status": "healthy", "message": "Interview Bot API is running"}
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-    # Add at the top with other imports
-
-
-# Update CORS origins to include your Vercel frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://interview-coach-chi.vercel.app/",  # Replace with your actual Vercel URL
-        "http://localhost:5173",  # Keep for local development
-        "https://localhost:5173"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Update the uvicorn run command at the bottom
+# Main entry point - Updated for production
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
