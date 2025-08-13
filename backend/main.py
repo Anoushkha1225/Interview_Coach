@@ -45,7 +45,7 @@ app.add_middleware(
 # Setup LLM
 llm = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
-    model="deepseek/deepseek-r1-0528-qwen3-8b:free",
+    model="google/gemini-2.0-flash-exp:free",
     openai_api_key=api_key
 )
 
