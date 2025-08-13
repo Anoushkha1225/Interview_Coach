@@ -4,7 +4,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import uvicorn
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
@@ -15,6 +15,7 @@ import re
 import io
 import statistics
 import traceback
+import random
 
 # Load environment variables
 load_dotenv()
@@ -66,11 +67,12 @@ class SessionData(BaseModel):
     resume_chunks: List[str] = []
     resume_keywords: dict = {}
     resume_projects: List[str] = []
-    question_queue: List[dict] = []
+    questions_by_level: Dict[str, List[str]] = {"Easy": [], "Medium": [], "Hard": []}
     asked_questions: List[dict] = []
     current_level: str = "Easy"
     position: str = ""
     experience_level: str = ""
+    current_question_index: Dict[str, int] = {"Easy": 0, "Medium": 0, "Hard": 0}
 
 # Resume processing functions
 def read_pdf_from_bytes(file_bytes):
@@ -259,6 +261,64 @@ async def calculate_hiring_probability(asked_questions, position, experience_lev
             "completion_rate": 0
         }
 
+async def generate_questions(category, position, experience_level, resume_chunks):
+    try:
+        # Create different prompts based on category
+        if category == "Easy":
+            difficulty_instruction = "basic introductory questions suitable for warming up"
+        elif category == "Medium":
+            difficulty_instruction = "moderately challenging questions that test practical knowledge"
+        else:  # Hard
+            difficulty_instruction = "advanced technical questions that test deep understanding and problem-solving"
+        
+        prompt = f"""
+        You are an expert interviewer. Generate exactly 6 {category.lower()} level interview questions for the position of '{position}' suitable for a {experience_level} level candidate.
+        
+        Create {difficulty_instruction}.
+        
+        Resume Content:
+        {' '.join(resume_chunks[:3]) if resume_chunks else 'No resume content available'}
+        
+        Requirements:
+        - Questions should be {category.lower()} difficulty level
+        - Focus on {position} role requirements
+        - Consider {experience_level} experience level
+        - Make questions specific and actionable
+        - If technical role, include technical questions
+        - If non-technical role, focus on behavioral/situational questions
+        
+        Format: Return ONLY the questions, each on a new line, numbered 1-6:
+        1. [Question 1]
+        2. [Question 2]
+        3. [Question 3]
+        4. [Question 4]
+        5. [Question 5]
+        6. [Question 6]
+        """
+        
+        response = llm.invoke([HumanMessage(content=prompt)])
+        if response and response.content:
+            # Extract questions from numbered list
+            questions = []
+            lines = response.content.strip().split('\n')
+            for line in lines:
+                # Match patterns like "1. Question" or "1) Question"
+                match = re.match(r'^\d+[\.\)]\s*(.*)', line.strip())
+                if match:
+                    question = match.group(1).strip()
+                    if question and len(question) > 10:  # Basic validation
+                        questions.append(question)
+            
+            print(f"Generated {len(questions)} questions for {category} level")
+            return questions[:6]  # Ensure we only return 6 questions
+        
+        print(f"No response from LLM for {category} questions")
+        return []
+    except Exception as e:
+        print(f"Error generating {category} questions: {e}")
+        traceback.print_exc()
+        return []
+
 # API endpoints
 @app.post("/upload-resume")
 async def upload_resume(file: UploadFile = File(...), session_id: Optional[str] = Form("default")):
@@ -354,54 +414,40 @@ async def setup_interview(setup: InterviewSetup):
         session = sessions[session_id]
         session.position = setup.position
         session.experience_level = setup.experience_level
+        session.current_level = "Easy"  # Reset to Easy
+        session.asked_questions = []  # Reset asked questions
+        session.current_question_index = {"Easy": 0, "Medium": 0, "Hard": 0}  # Reset indices
+        
+        print(f"Setting up interview for position: {setup.position}, level: {setup.experience_level}")
         
         # Generate questions for all difficulty levels
-        question_queue = []
+        questions_by_level = {"Easy": [], "Medium": [], "Hard": []}
         
         for category in ['Easy', 'Medium', 'Hard']:
+            print(f"Generating {category} questions...")
             questions = await generate_questions(category, setup.position, setup.experience_level, session.resume_chunks)
-            for q in questions:
-                question_queue.append({"level": category, "question": q})
+            questions_by_level[category] = questions
+            print(f"Generated {len(questions)} {category} questions")
         
-        session.question_queue = question_queue
+        session.questions_by_level = questions_by_level
+        
+        # Calculate total questions
+        total_questions = sum(len(questions) for questions in questions_by_level.values())
+        
+        print(f"Total questions generated: {total_questions}")
+        print(f"Questions breakdown: Easy={len(questions_by_level['Easy'])}, Medium={len(questions_by_level['Medium'])}, Hard={len(questions_by_level['Hard'])}")
         
         return {
             "success": True,
             "message": "Interview setup complete",
-            "total_questions": len(question_queue),
-            "first_question": question_queue[0] if question_queue else None
+            "total_questions": total_questions,
+            "questions_by_level": {k: len(v) for k, v in questions_by_level.items()}
         }
     
     except Exception as e:
         print(f"Error setting up interview: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error setting up interview: {str(e)}")
-
-async def generate_questions(category, position, experience_level, resume_chunks):
-    try:
-        prompt = f"""
-        You are an AI Interview Question Generator.
-        Based on the following resume chunks, generate 6 {category} interview questions for the role of '{position}' suitable for a(n) {experience_level} level candidate.
-        
-        Resume Content:
-        {''.join(resume_chunks)}
-        
-        Only return the questions in a numbered list format.
-        If it is an IT/software related role, Make sure to ask technical questions, they should be based on the level of experience.
-        If it is a non-IT role, focus on behavioral and situational questions.
-        Format:
-        1. Question one
-        2. Question two 
-        """
-        
-        response = llm.invoke([HumanMessage(content=prompt)])
-        if response and response.content:
-            questions = re.findall(r'\d+\.\s+(.*)', response.content)
-            return questions
-        return []
-    except Exception as e:
-        print(f"Error generating questions: {e}")
-        return []
 
 @app.get("/get-next-question/{session_id}")
 async def get_next_question(session_id: str):
@@ -411,20 +457,60 @@ async def get_next_question(session_id: str):
         
         session = sessions[session_id]
         
-        # Find next question that hasn't been asked
-        asked_question_texts = {q["question"] for q in session.asked_questions}
+        print(f"Getting next question for session {session_id}")
+        print(f"Current level: {session.current_level}")
+        print(f"Questions answered so far: {len(session.asked_questions)}")
         
-        for question_data in session.question_queue:
-            if question_data["question"] not in asked_question_texts:
+        # Get questions for current level
+        current_level_questions = session.questions_by_level.get(session.current_level, [])
+        current_index = session.current_question_index.get(session.current_level, 0)
+        
+        print(f"Available questions for {session.current_level}: {len(current_level_questions)}")
+        print(f"Current index for {session.current_level}: {current_index}")
+        
+        # Check if we have more questions at current level
+        if current_index < len(current_level_questions):
+            question = current_level_questions[current_index]
+            session.current_question_index[session.current_level] += 1
+            
+            total_questions = sum(len(questions) for questions in session.questions_by_level.values())
+            
+            print(f"Serving question: {question}")
+            
+            return {
+                "success": True,
+                "question": question,
+                "level": session.current_level,
+                "current_level": session.current_level,
+                "questions_answered": len(session.asked_questions),
+                "total_questions": total_questions,
+                "interview_complete": False
+            }
+        
+        # If no more questions at current level, try other levels
+        for level in ["Easy", "Medium", "Hard"]:
+            level_questions = session.questions_by_level.get(level, [])
+            level_index = session.current_question_index.get(level, 0)
+            
+            if level_index < len(level_questions):
+                question = level_questions[level_index]
+                session.current_question_index[level] += 1
+                
+                total_questions = sum(len(questions) for questions in session.questions_by_level.values())
+                
+                print(f"Serving question from {level}: {question}")
+                
                 return {
                     "success": True,
-                    "question": question_data["question"],
-                    "level": question_data["level"],
+                    "question": question,
+                    "level": level,
                     "current_level": session.current_level,
                     "questions_answered": len(session.asked_questions),
-                    "total_questions": len(session.question_queue)
+                    "total_questions": total_questions,
+                    "interview_complete": False
                 }
         
+        print("No more questions available - interview complete")
         return {
             "success": False,
             "message": "No more questions available",
@@ -433,6 +519,7 @@ async def get_next_question(session_id: str):
     
     except Exception as e:
         print(f"Error getting next question: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error getting next question: {str(e)}")
 
 @app.post("/submit-answer")
@@ -445,8 +532,13 @@ async def submit_answer(submission: AnswerSubmission):
         
         session = sessions[session_id]
         
+        print(f"Submitting answer for session {session_id}")
+        print(f"Question: {submission.question}")
+        print(f"Answer: {submission.answer[:100]}...")
+        
         # Assess answer relevance
         relevance = await assess_answer_relevance(submission.answer, submission.question)
+        print(f"Answer relevance: {relevance}")
         
         # Generate AI review and rating
         review_data = await generate_answer_review_and_rating(
@@ -456,9 +548,13 @@ async def submit_answer(submission: AnswerSubmission):
             session.experience_level
         )
         
-        # Adjust difficulty level
-        new_level = adjust_question_difficulty(relevance, session.current_level)
+        print(f"Rating: {review_data['rating']}")
+        
+        # Adjust difficulty level based on performance
+        new_level = adjust_question_difficulty(review_data["rating"], session.current_level)
         session.current_level = new_level
+        
+        print(f"New level: {new_level}")
         
         # Store the asked question and answer with review and rating
         session.asked_questions.append({
@@ -470,6 +566,8 @@ async def submit_answer(submission: AnswerSubmission):
             "review": review_data["review"]
         })
         
+        total_questions = sum(len(questions) for questions in session.questions_by_level.values())
+        
         return {
             "success": True,
             "relevance": relevance,
@@ -477,11 +575,12 @@ async def submit_answer(submission: AnswerSubmission):
             "rating": review_data["rating"],
             "review": review_data["review"],
             "questions_answered": len(session.asked_questions),
-            "total_questions": len(session.question_queue)
+            "total_questions": total_questions
         }
     
     except Exception as e:
         print(f"Error submitting answer: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error submitting answer: {str(e)}")
 
 async def assess_answer_relevance(answer, question):
@@ -500,15 +599,20 @@ async def assess_answer_relevance(answer, question):
         print(f"Error assessing relevance: {e}")
         return 'relevant'
 
-def adjust_question_difficulty(last_answer_relevance, current_level):
+def adjust_question_difficulty(rating, current_level):
+    """Adjust difficulty based on answer rating"""
     levels = ['Easy', 'Medium', 'Hard']
-    idx = levels.index(current_level)
+    current_index = levels.index(current_level)
     
-    if last_answer_relevance == 'relevant' and idx < len(levels) - 1:
-        return levels[idx + 1]
-    elif last_answer_relevance == 'not_relevant' and idx > 0:
-        return levels[idx - 1]
-    return current_level
+    # Move up if rating is good (4-5 stars)
+    if rating >= 4 and current_index < len(levels) - 1:
+        return levels[current_index + 1]
+    # Move down if rating is poor (1-2 stars)
+    elif rating <= 2 and current_index > 0:
+        return levels[current_index - 1]
+    # Stay at same level for average performance (3 stars)
+    else:
+        return current_level
 
 @app.get("/interview-summary/{session_id}")
 async def get_interview_summary(session_id: str):
@@ -518,12 +622,14 @@ async def get_interview_summary(session_id: str):
         
         session = sessions[session_id]
         
+        total_questions = sum(len(questions) for questions in session.questions_by_level.values())
+        
         # Calculate hiring probability
         hiring_assessment = await calculate_hiring_probability(
             session.asked_questions, 
             session.position, 
             session.experience_level,
-            len(session.question_queue)
+            total_questions
         )
         
         return {
@@ -531,7 +637,7 @@ async def get_interview_summary(session_id: str):
             "position": session.position,
             "experience_level": session.experience_level,
             "questions_answered": len(session.asked_questions),
-            "total_questions": len(session.question_queue),
+            "total_questions": total_questions,
             "asked_questions": session.asked_questions,
             "final_level": session.current_level,
             "overall_rating": hiring_assessment.get("average_rating", 0),
@@ -542,6 +648,7 @@ async def get_interview_summary(session_id: str):
     
     except Exception as e:
         print(f"Error getting interview summary: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error getting interview summary: {str(e)}")
 
 @app.delete("/reset-session/{session_id}")
