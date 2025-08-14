@@ -18,7 +18,7 @@ const InterviewBot = () => {
   const fileInputRef = useRef(null);
 
   // Backend API base URL
-  const API_BASE_URL = 'http://127.0.0.1:8000';
+  const API_BASE_URL = 'https://interview-coach-49a7.onrender.com';
 
   // Star Rating Component
   const StarRating = ({ rating, size = 'w-5 h-5' }) => {
