@@ -1,6 +1,5 @@
 # app.py - Enhanced FastAPI Backend with AI Rating System
 import os
-import pyttsx3
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -31,7 +30,7 @@ app = FastAPI(title="Adaptive Interview Bot API", version="1.0.0")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins="https://interview-coach-chi.vercel.app/",  # In production, specify your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
