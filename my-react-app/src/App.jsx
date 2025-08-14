@@ -18,7 +18,7 @@ const InterviewBot = () => {
   const fileInputRef = useRef(null);
 
   // Backend API base URL
-  const API_BASE_URL = 'https://interview-coach-49a7.onrender.com';
+  const API_BASE_URL = 'http://127.0.0.1:8000';
 
   // Star Rating Component
   const StarRating = ({ rating, size = 'w-5 h-5' }) => {
@@ -262,7 +262,7 @@ const InterviewBot = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Interview Bot</h1>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">Adaptive Interview Bot</h1>
           <p className="text-gray-600">AI-powered interview preparation with dynamic question adaptation</p>
           <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg max-w-2xl mx-auto">
             <p className="text-sm text-yellow-800">
